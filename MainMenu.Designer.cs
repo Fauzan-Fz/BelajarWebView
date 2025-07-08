@@ -374,6 +374,7 @@
             this.btnStart.TabIndex = 6;
             this.btnStart.Text = "Start";
             this.btnStart.UseVisualStyleBackColor = false;
+            this.btnStart.Click += new System.EventHandler(this.StartScrape);
             // 
             // Result
             // 

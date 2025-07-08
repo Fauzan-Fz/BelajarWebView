@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SQLite;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
@@ -31,6 +33,9 @@ namespace PuppeteerWebView
         private WebView2DevToolsContext Page;
 
         public DataSettings DS = new DataSettings();
+
+        private List<Data> dataList;
+        private List<Data> dataDetail;
 
         #endregion Variable
 
@@ -222,17 +227,22 @@ namespace PuppeteerWebView
 
         #endregion Fungsi
 
+        #region Event Form
+
         /// Event handler untuk memulai browser saat form dimuat.
         private void LoadForm(object sender, System.EventArgs e)
         {
             startBrowser();
             AddLogs("Load Website", $"Ready to scrape : {website}");
+
             DS.GetList_Start = 3;
             DS.GetList_End = 5;
             DS.GetDetail_Start = 3;
             DS.GetDetail_End = 5;
             DS.NextPage_Start = 3;
             DS.NextPage_End = 5;
+
+            targetSet = (int)num_JumlahData.Value;
         }
 
         // Event handler untuk menavigasi ke kategori yang dipilih.
@@ -287,5 +297,131 @@ namespace PuppeteerWebView
             settingForm.NextPage(DS.NextPage_Start, DS.NextPage_End);
             settingForm.ShowDialog();
         }
+
+        private async void StartScrape(object sender, EventArgs e)
+        {
+            int Step = 0;
+            try
+            {
+                Step = 1; // Tambahkan Variabel
+                dataList = new List<Data>();
+                dataDetail = new List<Data>();
+
+                Step = 2; // Kondisi Target Kosong
+                if (targetSet == 0)
+                {
+                    MessageBox.Show("Tolong Isi Target Data Terlebih Dahulu", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                Step = 3; // Kondisi Target Kosong
+                if (string.IsNullOrEmpty(comboBox_Kategori.Text))
+                {
+                    MessageBox.Show("Tolong Isi Kategori Terlebih Dahulu", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                Step = 4;
+                await GetList();
+
+                AddLogs("Start Scrape", $"Berhasil Scrape : {website}");
+                MessageBox.Show($"Berhasil Scrape : {website}", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                AddLogs("Error", $"Start Scrape : {Step}, {ex}");
+            }
+        }
+
+        #endregion Event Form
+
+        #region Logic Scrape
+
+        public async Task GetList()
+        {
+            int Step = 0;
+            try
+            {
+            paging:
+                var Tunggu = new RandomGenerator().RandomNumber(DS.GetDetail_Start, DS.GetList_End);
+                await Task.Delay(Tunggu * 1000);
+
+                Step = 1; // Kondisi Target Kosong
+                var container = await Page.WaitForXPathAsync("//div[@class='main-list']", new WaitForSelectorOptions { Visible = true });
+                if (container == null)
+                {
+                    AddLogs("Error", "Tidak Ditemukan List Data Saat Ini");
+                    return;
+                }
+
+                Step = 3; // List Item Product
+                var itemList = await container.XPathAsync(".//div[contains(@class, 'box-ruby')]");
+                if (itemList == null)
+                {
+                    AddLogs("Error", "Tidak Ditemukan List Data Saat Ini");
+                    return;
+                }
+
+                Step = 4; // Mengambil Data
+                foreach (var item in itemList)
+                {
+                    if (isStopped)
+                    {
+                        AddLogs("Error", $"Stop Scrape : {website}");
+                        return;
+                    }
+                    if (dataList.Count < targetSet)
+                    {
+                        Step = 5; // Nama Produk
+                        var DT = new Data();
+                        await item.EvaluateFunctionAsync("e => e.scrollIntoView()");
+
+                        Step = 6;  // Nama Produk
+                        var name = await item.XPathAsync(".//div[contains(@class, 'title')]/a");
+                        if (name.Length > 0)
+                        {
+                            DT.Url = await name[0].EvaluateFunctionAsync<string>("e => e.href", name[0]);
+                            DT.Name = await name[0].EvaluateFunctionAsync<string>("e => e.innerText", name[0]);
+                        }
+
+                        Step = 7; // Kondisi Url Kosong
+                        if (!string.IsNullOrEmpty(DT.Url))
+                        {
+                            Step = 8; // Menampilkan Data
+                            dataList.Add(DT);
+
+                            if (isDebug)
+                            {
+                                AddLogs("Data List", $"{dataList.Count()}{DT.Name} - {DT.Url}");
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                Step = 9;
+                if (dataList.Count < targetSet)
+                {
+                    Step = 10; // Navigasi Halaman
+                    var btnNext = await Page.XPathAsync("//span[contains(@class,'selected')]//../following-sibling::li[1]/a");
+                    if (btnNext != null)
+                    {
+                        await btnNext[0].EvaluateFunctionAsync("e => e.scrollIntoView()");
+                        await btnNext[0].EvaluateFunctionAsync("e => e.click()");
+                        goto paging;
+                    }
+                    else
+                    {
+                        MessageBox.Show("Scrape Selesai", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLogs("Error", $"Start Scrape : {Step}, {ex}");
+            }
+        }
+
+        #endregion Logic Scrape
     }
 }
