@@ -3,9 +3,12 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SQLite;
 using System.Linq;
+using System.Net.Http;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
+using Newtonsoft.Json;
 using WebView2.DevTools.Dom;
 using File = System.IO.File;
 
@@ -508,7 +511,7 @@ namespace PuppeteerWebView
                 var picture = await boxComapany.XPathAsync(".//img");
                 if (picture.Length > 0)
                 {
-                    DT.Phone = await picture[0].EvaluateFunctionAsync<string>("e => e.src", picture[0]);
+                    DT.Photo = await picture[0].EvaluateFunctionAsync<string>("e => e.src", picture[0]);
                 }
 
                 Step = 6; // Ambil Alamat
@@ -529,8 +532,11 @@ namespace PuppeteerWebView
                     }
                 }
 
-                //Step = 7; // Ambil No-Telp
-                //var phoneNum = await boxComapany.XPathAsync(".//button[@data-type='phone']");
+                Step = 7; // Ambil No-Telp
+
+                // Mengambil dari Text
+
+                var phoneNum = await boxComapany.XPathAsync(".//button[@data-type='phone']");
                 //if (phoneNum.Length > 0)
                 //{
                 //    await phoneNum[0].EvaluateFunctionAsync("e => e.scrollIntoView()");
@@ -557,6 +563,42 @@ namespace PuppeteerWebView
                 //        }
                 //    }
                 //}
+
+                /* - */
+
+                // Mengambil dari Payload
+                var payload = new Payload();
+                payload.Url = "leads/ajax";
+                payload.Id = await phoneNum[0].EvaluateFunctionAsync<string>("e => e.dataset.id", phoneNum[0]);
+                payload.Text = await phoneNum[0].EvaluateFunctionAsync<string>("e => e.dataset.text", phoneNum[0]);
+                payload.Type = await phoneNum[0].EvaluateFunctionAsync<string>("e => e.dataset.type", phoneNum[0]);
+
+                var json = JsonConvert.SerializeObject(payload);
+                var data = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var url = "https://www.indonetwork.co.id/ajax";
+                var client = new HttpClient();
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36");
+
+                HttpResponseMessage response = await client.PostAsync(url, data);
+                response.EnsureSuccessStatusCode();
+
+                var result = await response.Content.ReadAsStringAsync();
+                var phoneResult = JsonConvert.DeserializeObject<Respond>(result);
+
+                if (!string.IsNullOrEmpty(phoneResult.text))
+                {
+                    DT.Phone = phoneResult.text;
+
+                    string[] PhoneFilter = DT.Phone.Split('/');
+                    if (PhoneFilter.Length > 0)
+                    {
+                        DT.Phone = PhoneFilter[0];
+                        DT.Phone2 = PhoneFilter[1];
+                    }
+                }
+
+                /* - */
 
                 Step = 8; // Mengarahkan ke pemasang
                 await namaC[0].EvaluateFunctionAsync("e => e.click()");
@@ -633,4 +675,17 @@ namespace PuppeteerWebView
         public string OpenHours { get; set; }
         public string Location { get; set; }
     }
+    public class Payload
+    {
+        public string Url { get; set; }
+        public string Id { get; set; }
+        public string Text { get; set; }
+        public string Type { get; set; }
+    }
+
+    public class Respond
+    {
+        public string text { get; set; }
+    }
+
 }
