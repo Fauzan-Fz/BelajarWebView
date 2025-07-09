@@ -1,5 +1,4 @@
 ﻿using System.Windows.Forms;
-using PuppeteerWebView.Models;
 
 namespace PuppeteerWebView
 {
@@ -10,11 +9,7 @@ namespace PuppeteerWebView
             InitializeComponent();
         }
 
-        #region Variabel
 
-        public DataSettings DS = new DataSettings();
-
-        #endregion Variabel
 
         #region Fungsi
 
@@ -52,14 +47,14 @@ namespace PuppeteerWebView
         private void Save_Click(object sender, System.EventArgs e)
         {
             Form form = Application.OpenForms["PuppeteerForm"];
-            ((PuppeteerForm)form).DS.Username = textBox_Username.Text;
-            ((PuppeteerForm)form).DS.Password = textBox_Password.Text;
-            ((PuppeteerForm)form).DS.GetList_Start = (int)numGetList_Start.Value;
-            ((PuppeteerForm)form).DS.GetList_End = (int)numGetList_End.Value;
-            ((PuppeteerForm)form).DS.GetDetail_Start = (int)numGetDetail_Start.Value;
-            ((PuppeteerForm)form).DS.GetDetail_End = (int)numGetDetail_End.Value;
-            ((PuppeteerForm)form).DS.NextPage_Start = (int)numNextPage_Start.Value;
-            ((PuppeteerForm)form).DS.NextPage_End = (int)numNextPage_End.Value;
+            ((PuppeteerForm)form).Username = textBox_Username.Text;
+            ((PuppeteerForm)form).Password = textBox_Password.Text;
+            ((PuppeteerForm)form).GetList_Start = (int)numGetList_Start.Value;
+            ((PuppeteerForm)form).GetList_End = (int)numGetList_End.Value;
+            ((PuppeteerForm)form).GetDetail_Start = (int)numGetDetail_Start.Value;
+            ((PuppeteerForm)form).GetDetail_End = (int)numGetDetail_End.Value;
+            ((PuppeteerForm)form).NextPage_Start = (int)numNextPage_Start.Value;
+            ((PuppeteerForm)form).NextPage_End = (int)numNextPage_End.Value;
             this.Close();
         }
     }

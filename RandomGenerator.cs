@@ -14,8 +14,6 @@ namespace PuppeteerWebView
         /// <summary>
         /// Menghasilkan angka acak dari min hingga max (inklusif).
         /// </summary>
-        /// <param name="min">Batas bawah</param>
-        /// <param name="max">Batas atas</param>
         /// <returns>Integer acak antara min dan max</returns>
         public int RandomNumber(int min, int max)
         {
