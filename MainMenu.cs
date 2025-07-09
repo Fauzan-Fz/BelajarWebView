@@ -6,7 +6,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
-using PuppeteerWebView.Models;
 using WebView2.DevTools.Dom;
 using File = System.IO.File;
 
@@ -32,7 +31,14 @@ namespace PuppeteerWebView
 
         private WebView2DevToolsContext Page;
 
-        public DataSettings DS = new DataSettings();
+        public string Username { get; set; }
+        public string Password { get; set; }
+        public int GetList_Start { get; set; }
+        public int GetList_End { get; set; }
+        public int GetDetail_Start { get; set; }
+        public int GetDetail_End { get; set; }
+        public int NextPage_Start { get; set; }
+        public int NextPage_End { get; set; }
 
         private List<Data> dataList;
         private List<Data> dataDetail;
@@ -235,12 +241,12 @@ namespace PuppeteerWebView
             startBrowser();
             AddLogs("Load Website", $"Ready to scrape : {website}");
 
-            DS.GetList_Start = 3;
-            DS.GetList_End = 5;
-            DS.GetDetail_Start = 3;
-            DS.GetDetail_End = 5;
-            DS.NextPage_Start = 3;
-            DS.NextPage_End = 5;
+            GetList_Start = 3;
+            GetList_End = 5;
+            GetDetail_Start = 3;
+            GetDetail_End = 5;
+            NextPage_Start = 3;
+            NextPage_End = 5;
 
             targetSet = (int)num_JumlahData.Value;
         }
@@ -277,7 +283,7 @@ namespace PuppeteerWebView
         // Menentukan mode debug aktif atau tidak berdasarkan checkbox.
         private void Debug_Check(object sender, System.EventArgs e)
         {
-            if (this.checkBox_DisableImage.CheckState == CheckState.Checked)
+            if (this.checkBox_Debug.CheckState == CheckState.Checked)
             {
                 isDebug = true;
             }
@@ -291,10 +297,10 @@ namespace PuppeteerWebView
         private void Open_Setting(object sender, EventArgs e)
         {
             var settingForm = new Settings();
-            settingForm.Account(DS.Username, DS.Password);
-            settingForm.GetList(DS.GetDetail_Start, DS.GetList_End);
-            settingForm.GetDetail(DS.GetDetail_Start, DS.GetDetail_End);
-            settingForm.NextPage(DS.NextPage_Start, DS.NextPage_End);
+            settingForm.Account(Username, Password);
+            settingForm.GetList(GetDetail_Start, GetList_End);
+            settingForm.GetDetail(GetDetail_Start, GetDetail_End);
+            settingForm.NextPage(NextPage_Start, NextPage_End);
             settingForm.ShowDialog();
         }
 
@@ -324,12 +330,39 @@ namespace PuppeteerWebView
                 Step = 4;
                 await GetList();
 
+                Step = 5; // Kondisi List Kosong
+                if (dataList.Count() == 0)
+                {
+                    MessageBox.Show($"List Kosong / Tidak Ditemukan", "Stop Scrape", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    AddLogs("Error", "List Kosong / Tidak Ditemukan");
+                    return;
+                }
+
+                Step = 6; // Mulai Scrape
+                foreach (var item in dataList)
+                {
+                    await GetDetail(item);
+                }
+
+                Step = 7;
                 AddLogs("Start Scrape", $"Berhasil Scrape : {website}");
                 MessageBox.Show($"Berhasil Scrape : {website}", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
                 AddLogs("Error", $"Start Scrape : {Step}, {ex}");
+            }
+        }
+
+        private void btnStop_Click(object sender, EventArgs e)
+        {
+            if (isStopped == false)
+            {
+                isStopped = true;
+            }
+            else
+            {
+                isStopped = false;
             }
         }
 
@@ -340,14 +373,16 @@ namespace PuppeteerWebView
         public async Task GetList()
         {
             int Step = 0;
+            int pageNext = 1;
             try
             {
             paging:
-                var Tunggu = new RandomGenerator().RandomNumber(DS.GetDetail_Start, DS.GetList_End);
+                // Tunggu Sebelum Scrape
+                var Tunggu = new RandomGenerator().RandomNumber(GetList_Start, GetList_End);
                 await Task.Delay(Tunggu * 1000);
 
                 Step = 1; // Kondisi Target Kosong
-                var container = await Page.WaitForXPathAsync("//div[@class='main-list']", new WaitForSelectorOptions { Visible = true });
+                var container = await Page.WaitForXPathAsync("//div[contains(@class, 'main-list')]", new WaitForSelectorOptions { Visible = true });
                 if (container == null)
                 {
                     AddLogs("Error", "Tidak Ditemukan List Data Saat Ini");
@@ -355,7 +390,7 @@ namespace PuppeteerWebView
                 }
 
                 Step = 3; // List Item Product
-                var itemList = await container.XPathAsync(".//div[contains(@class, 'box-ruby')]");
+                var itemList = await container.XPathAsync(".//div[contains(@class, 'title')]");
                 if (itemList == null)
                 {
                     AddLogs("Error", "Tidak Ditemukan List Data Saat Ini");
@@ -370,6 +405,7 @@ namespace PuppeteerWebView
                         AddLogs("Error", $"Stop Scrape : {website}");
                         return;
                     }
+
                     if (dataList.Count < targetSet)
                     {
                         Step = 5; // Nama Produk
@@ -377,7 +413,7 @@ namespace PuppeteerWebView
                         await item.EvaluateFunctionAsync("e => e.scrollIntoView()");
 
                         Step = 6;  // Nama Produk
-                        var name = await item.XPathAsync(".//div[contains(@class, 'title')]/a");
+                        var name = await item.XPathAsync("./a");
                         if (name.Length > 0)
                         {
                             DT.Url = await name[0].EvaluateFunctionAsync<string>("e => e.href", name[0]);
@@ -392,27 +428,36 @@ namespace PuppeteerWebView
 
                             if (isDebug)
                             {
-                                AddLogs("Data List", $"{dataList.Count()}{DT.Name} - {DT.Url}");
-                                return;
+                                AddLogs("Data List", $"{dataList.Count()}. {DT.Name} - {DT.Url}");
                             }
                         }
                     }
                 }
 
+                AddLogs("Output", $"Page {pageNext.ToString()} - {itemList.Length} Element - Queue {dataList.Count()} Data");
+
                 Step = 9;
                 if (dataList.Count < targetSet)
                 {
                     Step = 10; // Navigasi Halaman
-                    var btnNext = await Page.XPathAsync("//span[contains(@class,'selected')]//../following-sibling::li[1]/a");
-                    if (btnNext != null)
+                    var btnNext = await Page.XPathAsync("//ul[contains(@class, 'paging')]//span");
+                    if (btnNext.Length > 0)
                     {
-                        await btnNext[0].EvaluateFunctionAsync("e => e.scrollIntoView()");
-                        await btnNext[0].EvaluateFunctionAsync("e => e.click()");
-                        goto paging;
-                    }
-                    else
-                    {
-                        MessageBox.Show("Scrape Selesai", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        string numBer = await btnNext[0].EvaluateFunctionAsync<string>("e => e.textContent", btnNext[0]);
+
+                        int Next = int.Parse(numBer) + 1;
+
+                        var btnClick = await Page.XPathAsync($"//ul[contains(@class, 'paging')]//a[text()='{Next}']");
+                        if (btnClick.Length > 0)
+                        {
+                            var Tunggu2 = new RandomGenerator().RandomNumber(NextPage_Start, NextPage_End);
+                            await Task.Delay(Tunggu2 * 1000);
+
+                            await btnClick[0].EvaluateFunctionAsync("e => e.scrollIntoView()");
+                            await btnClick[0].EvaluateFunctionAsync("e => e.click()");
+                            pageNext += 1;
+                            goto paging;
+                        }
                     }
                 }
             }
@@ -422,6 +467,170 @@ namespace PuppeteerWebView
             }
         }
 
+        public async Task GetDetail(Data Dtl)
+        {
+            int Step = 0;
+            try
+            {
+                if (isStopped)
+                {
+                    AddLogs("Error", $"Stop Scrape : {website}");
+                    return;
+                }
+
+                Step = 1; //Data
+                var DT = new Data();
+
+                Step = 2; // Page goto Produk
+                webView21.CoreWebView2.Navigate(Dtl.Url);
+
+                var Tunggu = new RandomGenerator().RandomNumber(GetDetail_Start, GetDetail_End);
+                await Task.Delay(Tunggu * 1000);
+
+                Step = 3; // Wait
+                var boxComapany = await Page.WaitForXPathAsync("//div[contains(@class,'company-box')]", new WaitForSelectorOptions { Visible = true });
+                if (boxComapany == null)
+                {
+                    AddLogs("Error", "Company Box Tidak Ditemukan Saat Ini");
+                    return;
+                }
+
+                Step = 4; // Ambil Data Company
+                var namaC = await boxComapany.XPathAsync(".//h3/a");
+                if (namaC.Length > 0)
+                {
+                    DT.Name = await namaC[0].EvaluateFunctionAsync<string>("e => e.textContent", namaC[0]);
+                    string ExtId = await namaC[0].EvaluateFunctionAsync<string>("e => e.href", namaC[0]);
+                    DT.ExtId = ExtId.Split('/').Last();
+                }
+
+                Step = 5; // Ambil Gambar atau Logo
+                var picture = await boxComapany.XPathAsync(".//img");
+                if (picture.Length > 0)
+                {
+                    DT.Phone = await picture[0].EvaluateFunctionAsync<string>("e => e.src", picture[0]);
+                }
+
+                Step = 6; // Ambil Alamat
+                var address = await boxComapany.XPathAsync(".//div[contains(text(),'Indonesia')]");
+                if (address.Length > 0)
+                {
+                    DT.Address = await address[0].EvaluateFunctionAsync<string>("e => e.innerText", address[0]);
+                    if (!string.IsNullOrEmpty(DT.Address))
+                    {
+                        DT.Postal = DT.Address.Split('-').Last();
+                        string[] Lokasi = DT.Address.Split(',');
+                        if (Lokasi.Length > 0)
+                        {
+                            DT.Country = Lokasi[Lokasi.Length - 1].GetBefore("-");
+                            DT.State = Lokasi[Lokasi.Length - 2];
+                            DT.City = Lokasi[Lokasi.Length - 3].Split("-").Last();
+                        }
+                    }
+                }
+
+                //Step = 7; // Ambil No-Telp
+                //var phoneNum = await boxComapany.XPathAsync(".//button[@data-type='phone']");
+                //if (phoneNum.Length > 0)
+                //{
+                //    await phoneNum[0].EvaluateFunctionAsync("e => e.scrollIntoView()");
+                //    await phoneNum[0].EvaluateFunctionAsync("e => e.click()");
+
+                //    var resultPhone = await Page.WaitForXPathAsync("//div[][contains(@class,'conatact-detail')]", new WaitForSelectorOptions { Visible = true });
+                //    if (resultPhone != null)
+                //    {
+                //        var Phone1 = await resultPhone.XPathAsync("./a[1]/span");
+                //        if (Phone1.Length > 0)
+                //        {
+                //            DT.Phone = await Phone1[0].EvaluateFunctionAsync<string>("e => e.textContent", Phone1[0]);
+                //        }
+
+                //        var Phone2 = await resultPhone.XPathAsync("./a[2]/span");
+                //        if (Phone2.Length > 0)
+                //        {
+                //            DT.Phone2 = await Phone2[0].EvaluateFunctionAsync<string>("e => e.textContent", Phone2[0]);
+                //        }
+
+                //        if (!string.IsNullOrEmpty(DT.Phone2) && DT.Phone2 == DT.Phone)
+                //        {
+                //            DT.Phone2 = null;
+                //        }
+                //    }
+                //}
+
+                Step = 8; // Mengarahkan ke pemasang
+                await namaC[0].EvaluateFunctionAsync("e => e.click()");
+
+                Step = 9; // Ambil Website Pemasang
+                var CompanyInfo = await Page.WaitForXPathAsync("//div[contains(@class,'company-info')]", new WaitForSelectorOptions { Visible = true });
+                if (CompanyInfo != null)
+                {
+                    var website = await CompanyInfo.XPathAsync(".//a[contains(@class,'btn-domain')]");
+                    if (website.Length > 0)
+                    {
+                        DT.Website = await website[0].EvaluateFunctionAsync<string>("e => e.href", website[0]);
+                    }
+                }
+
+                if (isStopped)
+                {
+                    AddLogs("Error", $"Stop Scrape : {website}");
+                    return;
+                }
+
+                Step = 10; // Check Kondisi ExtId
+                if (!string.IsNullOrEmpty(DT.ExtId))
+                {
+                    Step = 11; // Kondisi Filter Data Sama
+                    var dataSama = dataDetail.Where(c => c.ExtId == DT.ExtId).Count();
+
+                    if (dataSama <= 0)
+                    {
+                        Step = 12;
+                        AddResult(DT);
+
+                        if (isDebug)
+                        {
+                            AddLogs("Result", DT.SerializeJson());
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLogs("Error", $"Get Detail {Step} {ex}");
+            }
+        }
+
         #endregion Logic Scrape
+    }
+
+    public class Data
+    {
+        public string Unik { get; set; }
+        public string UrlPemasang { get; set; }
+        public string ExtId { get; set; }
+        public string Name { get; set; }
+        public string Email { get; set; }
+        public string Category { get; set; }
+        public string Photo { get; set; }
+        public string Address { get; set; }
+        public string LocatedIn { get; set; }
+        public string Phone { get; set; }
+        public string Website { get; set; }
+        public string Rating { get; set; }
+        public string Reviews { get; set; }
+        public string Postal { get; set; }
+        public string Phone2 { get; set; }
+        public string ExtSites { get; set; }
+        public string Url { get; set; }
+        public string Search { get; set; }
+        public string Country { get; set; }
+        public string City { get; set; }
+        public string State { get; set; }
+        public string Latitude { get; set; }
+        public string Longitude { get; set; }
+        public string OpenHours { get; set; }
+        public string Location { get; set; }
     }
 }
