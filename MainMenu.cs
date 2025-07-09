@@ -10,6 +10,7 @@ using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json;
 using WebView2.DevTools.Dom;
+using WebView2.DevTools.Dom.Input;
 using File = System.IO.File;
 
 namespace PuppeteerWebView
@@ -31,6 +32,7 @@ namespace PuppeteerWebView
         private bool isStopped = false;
         private bool isDebug = false;
         private int NoLogs = 0;
+        private bool loginTrue = false;
 
         private WebView2DevToolsContext Page;
 
@@ -330,10 +332,17 @@ namespace PuppeteerWebView
                     return;
                 }
 
-                Step = 4;
+                Step = 4; // Auto Login
+                await AutoLogin();
+                if (loginTrue == false)
+                {
+                    return;
+                }
+
+                Step = 5;
                 await GetList();
 
-                Step = 5; // Kondisi List Kosong
+                Step = 6; // Kondisi List Kosong
                 if (dataList.Count() == 0)
                 {
                     MessageBox.Show($"List Kosong / Tidak Ditemukan", "Stop Scrape", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -341,13 +350,13 @@ namespace PuppeteerWebView
                     return;
                 }
 
-                Step = 6; // Mulai Scrape
+                Step = 7; // Mulai Scrape
                 foreach (var item in dataList)
                 {
                     await GetDetail(item);
                 }
 
-                Step = 7;
+                Step = 8;
                 AddLogs("Start Scrape", $"Berhasil Scrape : {website}");
                 MessageBox.Show($"Berhasil Scrape : {website}", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -566,7 +575,7 @@ namespace PuppeteerWebView
 
                 /* - */
 
-                // Mengambil dari Payload
+                // Mengambil dari No-Phone Payload
                 var payload = new Payload();
                 payload.Url = "leads/ajax";
                 payload.Id = await phoneNum[0].EvaluateFunctionAsync<string>("e => e.dataset.id", phoneNum[0]);
@@ -644,6 +653,85 @@ namespace PuppeteerWebView
             }
         }
 
+        public async Task AutoLogin()
+        {
+            int Step = 0;
+            try
+            {
+                Step = 1; // Cek Username dan Password
+                if (string.IsNullOrEmpty(Username) || string.IsNullOrEmpty(Password))
+                {
+                    AddLogs("Stop Scrape", "Tolong Isi Username dan Password Terlebih Dahulu");
+                    isStopped = true;
+                    MessageBox.Show("Tolong Isi Username dan Password Terlebih Dahulu", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                var navBar = await Page.WaitForXPathAsync("//header", new WaitForSelectorOptions { Visible = true });
+                if (navBar == null)
+                {
+                    AddLogs("Stop Scrape", "Header Tidak Ditemukan");
+                    isStopped = true;
+                    return;
+                }
+
+                Step = 2; // Button Login
+                var btnLogin = await Page.XPathAsync(".//button[contains(text(), 'Login') ]");
+                if (btnLogin.Length > 0)
+                {
+                    await btnLogin[0].EvaluateFunctionAsync("e => e.click()");
+
+                    Step = 3; // Box Login
+                    var boxLogin = await Page.WaitForXPathAsync("//iframe[@id='all-iframe']");
+                    if (boxLogin != null)
+                    {
+                        var Iframe = await boxLogin.ContentFrameAsync(); // Handle Iframe Login Puppeteer
+
+                        await Task.Delay(3000); // Tunggu Sebentar Selagi Puppeteer Meng-Handle Iframe
+
+                        Step = 4; // Memasukan Username
+                        var inputUsername = await Iframe.WaitForSelectorAsync("input[id='input-1']");
+                        if (inputUsername != null)
+                        {
+                            await inputUsername.TypeAsync(Username, new TypeOptions { Delay = 100 });
+
+                            await Task.Delay(3000);
+
+                            Step = 5; // Masukan Password
+                            var inputPassword = await Iframe.WaitForSelectorAsync("input[id='input-2']");
+                            if (inputPassword != null)
+                            {
+                                await inputPassword.TypeAsync(Password, new TypeOptions { Delay = 100 });
+
+                                await Task.Delay(3000);
+
+                                Step = 6; // Tekan Enter / Press Enter
+                                await inputPassword.PressAsync("Enter");
+
+                                await Task.Delay(8000);
+
+                                Step = 7;
+                                var validLogin = await Page.WaitForXPathAsync("//div[@class='dropdown header-account-dropdown']");
+                                if (validLogin != null)
+                                {
+                                    AddLogs("Login", $"Berhasil Login {website}");
+                                    loginTrue = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    AddLogs("Login", $"Gagal Login {website}");
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLogs("Error", $"Auto Login {Step}, {ex}");
+            }
+        }
+
         #endregion Logic Scrape
     }
 
@@ -675,6 +763,7 @@ namespace PuppeteerWebView
         public string OpenHours { get; set; }
         public string Location { get; set; }
     }
+
     public class Payload
     {
         public string Url { get; set; }
@@ -687,5 +776,4 @@ namespace PuppeteerWebView
     {
         public string text { get; set; }
     }
-
 }
