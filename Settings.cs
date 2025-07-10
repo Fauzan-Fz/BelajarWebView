@@ -9,8 +9,6 @@ namespace PuppeteerWebView
             InitializeComponent();
         }
 
-
-
         #region Fungsi
 
         public void Account(string Username, string Password)
